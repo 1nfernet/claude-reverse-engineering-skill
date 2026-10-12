@@ -84,7 +84,14 @@ Any agent that can read a `SKILL.md` and run shell commands can use the full wor
 
 ### Claude Code (recommended)
 
-Install as a plugin — updates arrive automatically:
+Install as a plugin — updates arrive automatically. Inside Claude Code, run:
+
+```text
+/plugin marketplace add EncidXVII/claude-reverse-engineering-skill
+/plugin install reverse-engineering@reverse-engineering-skill
+```
+
+Or from your terminal:
 
 ```bash
 claude plugin marketplace add EncidXVII/claude-reverse-engineering-skill
