@@ -15,7 +15,7 @@ Usage:
     python check_tools.py --have          # just the names that are present
 
 Tasks: triage, native, debug, android, ios, dotnet, java, js, wasm, dynamic,
-       network, firmware, emulation, diffing
+       network, firmware, emulation, diffing, malware
 """
 from __future__ import annotations
 
@@ -138,6 +138,13 @@ TOOLS = {
     # diffing
     "rz-diff":   ("diffing: binary diff (rizin)", "ships with rizin"),
     "radiff2":   ("diffing: binary diff (radare2)", "ships with radare2"),
+    "bindiff":   ("diffing: function-level diff (with Ghidra/IDA)", "github.com/google/bindiff releases"),
+    # malware analysis (defensive)
+    "capa":      ("malware: capabilities mapped to ATT&CK", "github.com/mandiant/capa releases (or pip install flare-capa)"),
+    "floss":     ("malware: obfuscated/stack string recovery", "github.com/mandiant/flare-floss releases"),
+    "yara":      ("malware: rule-based matching", "apt/brew install yara"),
+    "diec":      ("malware: packer/compiler identification (Detect It Easy)", "github.com/horsicq/Detect-It-Easy releases"),
+    "olevba":    ("malware: Office macro extraction (oletools)", "pip install oletools"),
 }
 
 TASKS = {
@@ -155,7 +162,8 @@ TASKS = {
     "network":   ["mitmproxy", "mitmweb", "wireshark", "tshark", "grpcurl", "curl"],
     "firmware":  ["binwalk", "unblob", "unsquashfs", "7z"],
     "emulation": ["qemu-user-static", "qemu-system-arm"],
-    "diffing":   ["rz-diff", "radiff2"],
+    "diffing":   ["rz-diff", "radiff2", "bindiff"],
+    "malware":   ["capa", "floss", "yara", "diec", "olevba"],
 }
 
 

@@ -133,6 +133,8 @@ documenting how a check works in a research write-up, defensive detection).
 | Flutter / React Native / Xamarin / Unity / Godot / PyInstaller / Node SEA / Go / Rust build, or an installer/package (NSIS, Inno, MSI, MSIX, .deb, .rpm, AppImage, .dmg) | [references/frameworks-packagers.md](references/frameworks-packagers.md) |
 | Network protocol or app's HTTP(S)/binary API             | [references/web-apis-protocols.md](references/web-apis-protocols.md) |
 | A running process to observe/instrument                  | [references/dynamic-analysis.md](references/dynamic-analysis.md) |
+| Malware sample: capabilities, config, IOCs, YARA, report | [references/malware-analysis.md](references/malware-analysis.md) |
+| Two versions of the same program, app, or firmware       | [references/diffing.md](references/diffing.md) |
 | An RE MCP server is connected                            | [references/mcp-servers.md](references/mcp-servers.md) |
 | Unknown / "what even is this file"                       | run `scripts/triage.py`, follow its routing  |
 

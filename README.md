@@ -46,7 +46,7 @@ Built for authorized work: security research, CTFs, malware analysis, interopera
 - **Safe with untrusted samples.** Isolation rules for malware, `python -I` against import hijacking, and an explicit rule that text inside a binary is data — never instructions — so analyzed files can't prompt-inject the agent.
 - **Grounded output.** Every finding must cite an address, offset, symbol, or request the tools actually showed — no invented function names.
 - **Tested on real tools, not just docs.** 44 automated checks covering every script and the skill's structure, run in CI on Linux, macOS, and Windows, plus a CI job that runs the Ghidra export against a real Ghidra release on every push.
-- **Light on context.** One short `SKILL.md`; the 12 playbooks load only when a task needs them, so the skill costs almost nothing until it's used.
+- **Light on context.** One short `SKILL.md`; the 14 playbooks load only when a task needs them, so the skill costs almost nothing until it's used.
 - **One permissive license.** Everything is Apache-2.0 — safe to use at work, fork, and ship.
 
 ## What it can analyze
@@ -63,6 +63,8 @@ Built for authorized work: security research, CTFs, malware analysis, interopera
 | Firmware & IoT | router/camera images · SquashFS/JFFS2/UBI · bare-metal blobs | [firmware-embedded.md](skills/reverse-engineering/references/firmware-embedded.md) |
 | Network & APIs | HTTPS APIs · WebSockets · gRPC · custom binary protocols | [web-apis-protocols.md](skills/reverse-engineering/references/web-apis-protocols.md) |
 | Running processes | Frida hooks · tracing · sandboxed malware behavior | [dynamic-analysis.md](skills/reverse-engineering/references/dynamic-analysis.md) |
+| Malware | capability triage · obfuscated strings · config extraction · IOCs · YARA rules · reports | [malware-analysis.md](skills/reverse-engineering/references/malware-analysis.md) |
+| Version changes | what a security update fixed · regressions · format/protocol changes between builds | [diffing.md](skills/reverse-engineering/references/diffing.md) |
 
 ## Works with
 
@@ -246,7 +248,7 @@ python tests/test_scripts.py
 ├── evals/                   trigger evals for tuning the skill description
 ├── skills/reverse-engineering/
 │   ├── SKILL.md             entry point: workflow, routing, safety rules
-│   ├── references/          12 playbooks, loaded on demand
+│   ├── references/          14 playbooks, loaded on demand
 │   ├── scripts/             triage, tool check, endpoint extraction, Ghidra export
 │   └── assets/              findings report template
 └── tests/                   dependency-free test suite
