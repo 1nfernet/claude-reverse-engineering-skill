@@ -65,6 +65,10 @@ Once you have a decrypted (or never-encrypted) Mach-O:
 
 ## Entitlements, Info.plist, embedded data
 
+Fastest route: `python -I <skill-dir>/scripts/app_inspect.py app.ipa` (or a `.app` folder)
+prints the Info.plist essentials, entitlements from the code signature, frameworks, and
+whether each architecture slice is App Store encrypted, on any OS.
+
 ```bash
 plutil -p "Payload/App.app/Info.plist"          # bundle id, URL schemes, ATS config
 codesign -d --entitlements :- "Payload/App.app" # capabilities the app is granted

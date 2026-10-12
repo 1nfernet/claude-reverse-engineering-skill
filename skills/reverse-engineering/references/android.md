@@ -74,6 +74,10 @@ relevant when you're testing a patched build of *your own* app or a CTF target.
 
 ## Manifest and resources
 
+Fastest route: `python -I <skill-dir>/scripts/app_inspect.py app.apk` reads the binary
+manifest directly (package, SDK levels, permissions, exported components, deep links,
+debuggable/backup/cleartext flags) without apktool.
+
 The manifest is the app's blueprint — read it first:
 ```bash
 # after apktool d, just open app_src/AndroidManifest.xml

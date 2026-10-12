@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 import re
 import struct
 import subprocess
@@ -211,7 +212,177 @@ def test_extract_endpoints():
 
 
 # ---------------------------------------------------------------------------
-# 5. Structure: SKILL.md frontmatter, referenced paths, manifests.
+# 5. app_inspect.py: Android manifest, Apple bundle, Windows version info, games.
+# ---------------------------------------------------------------------------
+def build_axml(events):
+    """Minimal Android binary-XML writer. events: ("start", tag, [(attr, kind, value)]) / ("end", tag)."""
+    strings = []
+
+    def si(s):
+        if s not in strings:
+            strings.append(s)
+        return strings.index(s)
+
+    for ev in events:
+        si(ev[1])
+        if ev[0] == "start":
+            for name, kind, value in ev[2]:
+                si(name)
+                if kind == "s":
+                    si(value)
+    offs, sdata = b"", b""
+    for s in strings:
+        offs += struct.pack("<I", len(sdata))
+        sdata += struct.pack("<H", len(s)) + s.encode("utf-16-le") + b"\x00\x00"
+    while len(sdata) % 4:
+        sdata += b"\x00"
+    pool = struct.pack("<HHIIIIII", 0x0001, 28, 28 + len(offs) + len(sdata), len(strings), 0, 0,
+                       28 + len(offs), 0) + offs + sdata
+    body = b""
+    for ev in events:
+        if ev[0] == "start":
+            attrs = b""
+            for name, kind, value in ev[2]:
+                if kind == "s":
+                    attrs += struct.pack("<IIIHBBI", 0xFFFFFFFF, si(name), si(value), 8, 0, 0x03, si(value))
+                elif kind == "b":
+                    attrs += struct.pack("<IIIHBBI", 0xFFFFFFFF, si(name), 0xFFFFFFFF, 8, 0, 0x12,
+                                         0xFFFFFFFF if value else 0)
+                else:
+                    attrs += struct.pack("<IIIHBBI", 0xFFFFFFFF, si(name), 0xFFFFFFFF, 8, 0, 0x10, value)
+            size = 16 + 20 + len(attrs)
+            body += struct.pack("<HHIII", 0x0102, 16, size, 1, 0xFFFFFFFF)
+            body += struct.pack("<IIHHHHHH", 0xFFFFFFFF, si(ev[1]), 20, 20, len(ev[2]), 0, 0, 0) + attrs
+        else:
+            body += struct.pack("<HHIII", 0x0103, 16, 24, 1, 0xFFFFFFFF) + struct.pack("<II", 0xFFFFFFFF, si(ev[1]))
+    return struct.pack("<HHI", 0x0003, 8, 8 + len(pool) + len(body)) + pool + body
+
+
+def test_app_inspect():
+    print("\n[app_inspect] platform metadata extraction")
+    ai = os.path.join(SCRIPTS, "app_inspect.py")
+
+    def inspect(path):
+        rc, out = run([ai, path, "--json"])
+        try:
+            return rc, json.loads(out)
+        except ValueError:
+            return rc, {"_raw": out[:300]}
+
+    with tempfile.TemporaryDirectory() as d:
+        # Android
+        manifest = build_axml([
+            ("start", "manifest", [("package", "s", "com.example.demo"), ("versionName", "s", "1.2.3"),
+                                   ("versionCode", "i", 42)]),
+            ("start", "uses-sdk", [("minSdkVersion", "i", 24), ("targetSdkVersion", "i", 34)]), ("end", "uses-sdk"),
+            ("start", "uses-permission", [("name", "s", "android.permission.INTERNET")]), ("end", "uses-permission"),
+            ("start", "application", [("debuggable", "b", True), ("allowBackup", "b", False)]),
+            ("start", "activity", [("name", "s", ".MainActivity"), ("exported", "b", True)]),
+            ("start", "intent-filter", []),
+            ("start", "action", [("name", "s", "android.intent.action.MAIN")]), ("end", "action"),
+            ("start", "category", [("name", "s", "android.intent.category.LAUNCHER")]), ("end", "category"),
+            ("end", "intent-filter"),
+            ("start", "intent-filter", []),
+            ("start", "data", [("scheme", "s", "demoapp"), ("host", "s", "open")]), ("end", "data"),
+            ("end", "intent-filter"),
+            ("end", "activity"),
+            ("start", "service", [("name", "s", ".SyncService"), ("exported", "b", False)]), ("end", "service"),
+            ("start", "receiver", [("name", "s", "com.example.demo.PushReceiver")]),
+            ("start", "intent-filter", []), ("end", "intent-filter"),
+            ("end", "receiver"),
+            ("end", "application"), ("end", "manifest"),
+        ])
+        apk = os.path.join(d, "demo.apk")
+        with zipfile.ZipFile(apk, "w") as z:
+            z.writestr("AndroidManifest.xml", manifest)
+            z.writestr("classes.dex", "dex\n035\x00")
+            z.writestr("lib/arm64-v8a/libnative.so", "x")
+        rc, r = inspect(apk)
+        check("android: package/version", r.get("package") == "com.example.demo" and r.get("version") == "1.2.3"
+              and r.get("version_code") == 42 and r.get("target_sdk") == 34, str(r)[:200])
+        check("android: launcher + permission", r.get("launcher") == "com.example.demo.MainActivity"
+              and "android.permission.INTERNET" in r.get("permissions", []), str(r.get("launcher")))
+        check("android: deep link", any(l["url"] == "demoapp://open" for l in r.get("deep_links", [])), str(r.get("deep_links")))
+        exp = {e["name"]: e["exported"] for e in r.get("exported", [])}
+        check("android: exported (explicit + implicit, not false)", exp.get("com.example.demo.MainActivity") is True
+              and str(exp.get("com.example.demo.PushReceiver", "")).startswith("implicit")
+              and "com.example.demo.SyncService" not in exp, str(exp))
+        check("android: debuggable flag", r.get("app", {}).get("debuggable") is True, str(r.get("app")))
+
+        # Apple (IPA): Info.plist, encrypted arm64 slice, entitlements in the code signature
+        ents = plistlib.dumps({"application-identifier": "TEAM.com.example.demo", "get-task-allow": True})
+        ent_blob = struct.pack(">II", 0xFADE7171, 8 + len(ents)) + ents
+        superblob = struct.pack(">III", 0xFADE0CC0, 20 + len(ent_blob), 1) + struct.pack(">II", 5, 20) + ent_blob
+        macho = (struct.pack("<IiiIIIII", 0xFEEDFACF, 0x0100000C, 0, 2, 2, 40, 0, 0)
+                 + struct.pack("<IIIIII", 0x2C, 24, 0, 0, 1, 0)
+                 + struct.pack("<IIII", 0x1D, 16, 72, len(superblob)) + superblob)
+        info = plistlib.dumps({"CFBundleIdentifier": "com.example.demo", "CFBundleShortVersionString": "2.0",
+                               "CFBundleExecutable": "Demo", "CFBundleURLTypes": [{"CFBundleURLSchemes": ["demo"]}],
+                               "NSAppTransportSecurity": {"NSAllowsArbitraryLoads": True},
+                               "NSCameraUsageDescription": "scan codes"}, fmt=plistlib.FMT_BINARY)
+        ipa = os.path.join(d, "demo.ipa")
+        with zipfile.ZipFile(ipa, "w") as z:
+            z.writestr("Payload/Demo.app/Info.plist", info)
+            z.writestr("Payload/Demo.app/Demo", macho)
+            z.writestr("Payload/Demo.app/Frameworks/Foo.framework/Foo", "x")
+        rc, r = inspect(ipa)
+        check("apple: plist fields", r.get("bundle_id") == "com.example.demo" and r.get("url_schemes") == ["demo"]
+              and r.get("ats_allows_arbitrary_loads") is True
+              and "NSCameraUsageDescription" in r.get("privacy_permissions", []), str(r)[:200])
+        sl = (r.get("slices") or [{}])[0]
+        check("apple: arm64 slice marked encrypted", sl.get("arch") == "arm64" and sl.get("encrypted") is True, str(sl))
+        check("apple: entitlements from code signature", (sl.get("entitlements") or {}).get("get-task-allow") is True, str(sl))
+        check("apple: frameworks", r.get("frameworks") == ["Foo.framework"], str(r.get("frameworks")))
+
+        # Windows: version resource + manifest execution level
+        def vs_string(key, val):
+            body = struct.pack("<HHH", 0, len(val) + 1, 1) + key.encode("utf-16-le") + b"\x00\x00"
+            body += b"\x00" * (-len(body) % 4) + val.encode("utf-16-le") + b"\x00\x00"
+            body += b"\x00" * (-len(body) % 4)
+            return struct.pack("<H", len(body)) + body[2:]
+        vs = struct.pack("<HHH", 0, 0, 1) + "VS_VERSION_INFO".encode("utf-16-le") + b"\x00\x00"
+        vs += b"\x00" * (-len(vs) % 4)
+        for k, v in (("CompanyName", "Example Corp"), ("ProductName", "Demo App"), ("FileVersion", "1.2.3.4")):
+            vs += vs_string(k, v)
+        vs = struct.pack("<H", len(vs)) + vs[2:]
+        pe = os.path.join(d, "demo.exe")
+        with open(pe, "wb") as f:
+            f.write(make_pe(extra=b"\x00" * 4 + vs + b'<requestedExecutionLevel level="asInvoker"/>'))
+        rc, r = inspect(pe)
+        vi = r.get("version_info", {})
+        check("windows: version resource", vi.get("CompanyName") == "Example Corp"
+              and vi.get("ProductName") == "Demo App" and vi.get("FileVersion") == "1.2.3.4", str(vi))
+        check("windows: execution level + unsigned", r.get("execution_level") == "asInvoker"
+              and r.get("signed") is False, str(r)[:200])
+
+        # Games: Unity IL2CPP and Godot
+        unity = os.path.join(d, "UnityGame")
+        os.makedirs(os.path.join(unity, "Demo_Data", "il2cpp_data", "Metadata"))
+        with open(os.path.join(unity, "Demo_Data", "globalgamemanagers"), "wb") as f:
+            f.write(b"\x00" * 20 + b"2022.3.10f1" + b"\x00" * 20)
+        with open(os.path.join(unity, "GameAssembly.dll"), "wb") as f:
+            f.write(b"MZ")
+        with open(os.path.join(unity, "Demo_Data", "il2cpp_data", "Metadata", "global-metadata.dat"), "wb") as f:
+            f.write(struct.pack("<Ii", 0xFAB11BAF, 29))
+        rc, r = inspect(unity)
+        check("game: Unity IL2CPP + version + metadata", r.get("engine") == "Unity" and r.get("backend") == "IL2CPP"
+              and r.get("version") == "2022.3.10f1" and r.get("il2cpp_metadata_version") == 29, str(r)[:200])
+        godot = os.path.join(d, "GodotGame")
+        os.makedirs(godot)
+        with open(os.path.join(godot, "game.pck"), "wb") as f:
+            f.write(b"GDPC" + struct.pack("<IIII", 2, 4, 2, 1))
+        rc, r = inspect(godot)
+        check("game: Godot version", r.get("engine") == "Godot" and r.get("version") == "4.2.1", str(r)[:200])
+
+        # malformed input must not crash
+        bad = os.path.join(d, "bad.apk")
+        with zipfile.ZipFile(bad, "w") as z:
+            z.writestr("AndroidManifest.xml", b"\x03\x00\x08\x00garbage")
+        rc, r = inspect(bad)
+        check("no crash on malformed manifest", rc == 0, str(r)[:200])
+
+# ---------------------------------------------------------------------------
+# 6. Structure: SKILL.md frontmatter, referenced paths, manifests.
 # ---------------------------------------------------------------------------
 def _parse_frontmatter(text):
     m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
@@ -280,7 +451,7 @@ def test_structure():
 
 def main():
     print("Testing reverse-engineering skill at:\n  " + SKILL)
-    for t in (test_compile, test_triage, test_check_tools, test_extract_endpoints, test_structure):
+    for t in (test_compile, test_triage, test_check_tools, test_extract_endpoints, test_app_inspect, test_structure):
         t()
     print("\n" + "=" * 60)
     if _failures:

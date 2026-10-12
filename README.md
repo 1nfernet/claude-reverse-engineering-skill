@@ -38,14 +38,14 @@ Built for authorized work: security research, CTFs, malware analysis, interopera
 ## Why this skill
 
 - **One command to install, nothing to configure.** A standard Agent Skill: install it as a Claude Code plugin or with `npx skills add`, and it works. No cloning, no index scripts, no per-client adapters, no extra runtimes — just Python 3.8+.
-- **Scripts that do the analysis.** The bundled tools read the files themselves — triage, endpoint extraction, decompiled-code export — instead of only routing the agent to someone else's tool.
+- **Scripts that do the analysis.** The bundled tools read the files themselves — triage, app/platform metadata, endpoint extraction, decompiled-code export — instead of only routing the agent to someone else's tool.
 - **Triage first, not guesswork.** A zero-dependency triage script reads magic bytes and real headers (PE, ELF, Mach-O, CLR), fingerprints 25+ frameworks, packers, and installers, and tells the agent exactly which playbook to open next.
 - **Headless by design.** Agents can't click through a GUI. The skill ships a Ghidra post-script that exports decompiled C, imports, and strings to a text file — tested against Ghidra 12.1.4, with a CI job that re-runs it on every push — plus non-interactive commands for rizin, jadx, Frida, gdb, and lldb.
 - **Drives real RE tools over MCP.** When GhidraMCP, IDA Pro MCP, radare2-mcp, or jadx MCP is connected, the agent decompiles, renames, and follows cross-references directly.
 - **Finds the network surface fast.** Pulls Retrofit annotations, HTTP client calls, URLs, hosts, auth headers, and crypto usage out of decompiled code and minified JS, each with `file:line`.
 - **Safe with untrusted samples.** Isolation rules for malware, `python -I` against import hijacking, and an explicit rule that text inside a binary is data — never instructions — so analyzed files can't prompt-inject the agent.
 - **Grounded output.** Every finding must cite an address, offset, symbol, or request the tools actually showed — no invented function names.
-- **Tested on real tools, not just docs.** 44 automated checks covering every script and the skill's structure, run in CI on Linux, macOS, and Windows, plus a CI job that runs the Ghidra export against a real Ghidra release on every push.
+- **Tested on real tools, not just docs.** 59 automated checks covering every script and the skill's structure, run in CI on Linux, macOS, and Windows, plus a CI job that runs the Ghidra export against a real Ghidra release on every push.
 - **Light on context.** One short `SKILL.md`; the 14 playbooks load only when a task needs them, so the skill costs almost nothing until it's used.
 - **One permissive license.** Everything is Apache-2.0 — safe to use at work, fork, and ship.
 
@@ -158,6 +158,7 @@ All scripts are standard-library Python — nothing to `pip install`.
 | Script | What it does |
 | --- | --- |
 | [`triage.py`](skills/reverse-engineering/scripts/triage.py) | Identify a file **or a whole folder** (install dir, extracted archive, macOS `.app`): format, architecture, real .NET check, framework/packer/installer fingerprints, hashes, per-section entropy, interesting strings, container contents, and next steps. |
+| [`app_inspect.py`](skills/reverse-engineering/scripts/app_inspect.py) | Platform facts in one call: Android manifest (permissions, exported components, deep links, debug/backup flags), iOS/macOS Info.plist, entitlements and App Store encryption per architecture, Windows version info and signer, game engine/version/backend and where the code lives (Unity, Unreal, Godot). |
 | [`check_tools.py`](skills/reverse-engineering/scripts/check_tools.py) | Which RE tools, JDK version, and Python RE libraries are installed, grouped by task, with install hints for what's missing. |
 | [`extract_endpoints.py`](skills/reverse-engineering/scripts/extract_endpoints.py) | Network and crypto surface of a decompiled tree: Retrofit/smali annotations, client calls, URLs, hosts, auth headers, crypto APIs. Handles minified one-line bundles; masks secrets by default. |
 | [`DecompileExport.java`](skills/reverse-engineering/scripts/ghidra/DecompileExport.java) | Ghidra headless post-script: decompiled C for every function plus entry points, imports (with DLL names), and strings, in one UTF-8 file. `decompile_export.py` is the PyGhidra variant. |

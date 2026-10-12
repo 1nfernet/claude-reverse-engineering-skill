@@ -30,6 +30,10 @@ Note it, then move to the container.
 
 ## Game engines
 
+`python -I <skill-dir>/scripts/app_inspect.py <game-folder>` reports the engine, version,
+Unity scripting backend (Mono or IL2CPP, with the IL2CPP metadata version), Unreal pak
+format, or Godot version, plus where the game code lives.
+
 Typical legitimate goals: modding a single-player game you own, reading a save or
 asset format for a tool, or interoperability. (Cheats for online multiplayer are
 out of scope — see the skill's scope section.)

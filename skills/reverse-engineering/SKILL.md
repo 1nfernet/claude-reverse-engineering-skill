@@ -73,6 +73,13 @@ documenting how a check works in a research write-up, defensive detection).
    ```bash
    python -I "${CLAUDE_SKILL_DIR}/scripts/triage.py" <file-or-dir>
    ```
+   For an app or game, also pull the platform's own metadata in one call — Android
+   manifest (permissions, exported components, deep links), Apple Info.plist,
+   entitlements and App Store encryption, Windows version info and signer, game
+   engine/backend and where the code lives:
+   ```bash
+   python -I "${CLAUDE_SKILL_DIR}/scripts/app_inspect.py" <apk|ipa|.app|exe|game-dir>
+   ```
 
 3. **Set up a safe workspace.** Put the target in its own fresh, empty directory;
    keep your notes and scripts elsewhere. Never execute, open, or build anything
