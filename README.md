@@ -37,13 +37,17 @@ Built for authorized work: security research, CTFs, malware analysis, interopera
 
 ## Why this skill
 
+- **One command to install, nothing to configure.** A standard Agent Skill: install it as a Claude Code plugin or with `npx skills add`, and it works. No cloning, no index scripts, no per-client adapters, no extra runtimes — just Python 3.8+.
+- **Scripts that do the analysis.** The bundled tools read the files themselves — triage, endpoint extraction, decompiled-code export — instead of only routing the agent to someone else's tool.
 - **Triage first, not guesswork.** A zero-dependency triage script reads magic bytes and real headers (PE, ELF, Mach-O, CLR), fingerprints 25+ frameworks, packers, and installers, and tells the agent exactly which playbook to open next.
 - **Headless by design.** Agents can't click through a GUI. The skill ships a Ghidra post-script that exports decompiled C, imports, and strings to a text file — tested against Ghidra 12.1.4, with a CI job that re-runs it on every push — plus non-interactive commands for rizin, jadx, Frida, gdb, and lldb.
 - **Drives real RE tools over MCP.** When GhidraMCP, IDA Pro MCP, radare2-mcp, or jadx MCP is connected, the agent decompiles, renames, and follows cross-references directly.
 - **Finds the network surface fast.** Pulls Retrofit annotations, HTTP client calls, URLs, hosts, auth headers, and crypto usage out of decompiled code and minified JS, each with `file:line`.
 - **Safe with untrusted samples.** Isolation rules for malware, `python -I` against import hijacking, and an explicit rule that text inside a binary is data — never instructions — so analyzed files can't prompt-inject the agent.
 - **Grounded output.** Every finding must cite an address, offset, symbol, or request the tools actually showed — no invented function names.
-- **Tested.** 44 automated checks covering every script and the skill's structure, run in CI on Linux, macOS, and Windows, plus a CI job that runs the export against a real Ghidra release.
+- **Tested on real tools, not just docs.** 44 automated checks covering every script and the skill's structure, run in CI on Linux, macOS, and Windows, plus a CI job that runs the Ghidra export against a real Ghidra release on every push.
+- **Light on context.** One short `SKILL.md`; the 12 playbooks load only when a task needs them, so the skill costs almost nothing until it's used.
+- **One permissive license.** Everything is Apache-2.0 — safe to use at work, fork, and ship.
 
 ## What it can analyze
 
@@ -192,8 +196,6 @@ python -I skills/reverse-engineering/scripts/extract_endpoints.py path/to/decomp
 5. **Route** — open the playbook for the target type.
 6. **Static first, dynamic to confirm** — headless decompilation, then hooks or a debugger in isolation when values only exist at runtime.
 7. **Record** — findings with addresses and offsets, using the [report template](skills/reverse-engineering/assets/findings-template.md).
-
-The skill keeps `SKILL.md` short and loads the detailed playbooks only when a task needs them, so it costs little context until it's used.
 
 ## Requirements
 
