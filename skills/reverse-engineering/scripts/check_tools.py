@@ -194,6 +194,7 @@ def main(argv=None) -> int:
     ap.add_argument("--task", choices=sorted(TASKS), help="only show one task group")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--have", action="store_true", help="print only installed tool names")
+    ap.add_argument("--verbose", action="store_true", help="every task in detail, with install hints")
     args = ap.parse_args(argv)
 
     status = {name: present(name) for name in TOOLS}
@@ -220,9 +221,24 @@ def main(argv=None) -> int:
         return 0
 
     have_count = sum(1 for ok in status.values() if ok)
-    print("=" * 70)
     print("REVERSE-ENGINEERING TOOLBOX  ({} of {} known tools present)".format(have_count, len(TOOLS)))
-    print("=" * 70)
+
+    # Default: one compact line per task. Install hints only when asked
+    # (--task/--verbose), because this runs every session and its output stays in
+    # the agent's context.
+    if not args.task and not args.verbose:
+        for task, names in tasks.items():
+            have = [n for n in names if status.get(n)]
+            miss = [n for n in names if not status.get(n)]
+            print("  {:<10} have: {:<34} missing: {}".format(
+                task, ", ".join(have) or "-", ", ".join(miss) or "-"))
+        libs_have = [n for n, ok in libs.items() if ok]
+        print("  {:<10} {}".format("java", "JDK %d" % jver if jver else "not found")
+              + ("  (Ghidra 12 needs 21+)" if jver and jver < 21 else ""))
+        print("  {:<10} have: {}".format("py-libs", ", ".join(libs_have) or "-"))
+        print("Install commands for one target type: check_tools.py --task <name>  (all: --verbose)")
+        return 0
+
     for task, names in tasks.items():
         shown = [n for n in names if n in TOOLS]
         present_here = [n for n in shown if status.get(n)]
@@ -234,7 +250,7 @@ def main(argv=None) -> int:
             if not status.get(n):
                 line += "\n        install: {}".format(hint)
             print(line)
-    if not args.task:
+    if args.verbose:
         print("\n[java]  " + ("JDK %d" % jver if jver else "not found"))
         if jver and jver < 21:
             print("        note: Ghidra 12 needs JDK 21+; jadx/apktool run on older JDKs")

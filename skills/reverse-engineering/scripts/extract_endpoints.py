@@ -219,6 +219,7 @@ def main(argv=None) -> int:
     ap.add_argument("--max-bytes", type=int, default=25_000_000, help="skip files larger than this (default 25MB)")
     ap.add_argument("--show-secrets", action="store_true", help="print secret-shaped strings in full (masked by default)")
     ap.add_argument("--keep-noise", action="store_true", help="keep well-known schema/doc/library hosts")
+    ap.add_argument("--top", type=int, default=20, help="entries shown per category in the text report (default 20)")
     args = ap.parse_args(argv)
 
     if not os.path.exists(args.path):
@@ -268,13 +269,15 @@ def main(argv=None) -> int:
             continue
         any_hits = True
         print("\n[%s]  %d distinct" % (title, len(hits)))
-        for val in sorted(hits)[:60]:
+        # Most-referenced first, capped: this output lands in the agent's context,
+        # so show the entries that matter and leave the long tail to --json.
+        for val in sorted(hits, key=lambda v: (-len(hits[v]), v))[:args.top]:
             locs = ", ".join(hits[val][:3])
             more = "" if len(hits[val]) <= 3 else " (+%d more)" % (len(hits[val]) - 3)
             shown = val if len(val) <= 100 else val[:97] + "..."
             print("  %s\n      %s%s" % (shown, locs, more))
-        if len(hits) > 60:
-            print("  ... %d more (use --json for all)" % (len(hits) - 60))
+        if len(hits) > args.top:
+            print("  ... %d more (full list: --json > endpoints.json, then grep it)" % (len(hits) - args.top))
     if not any_hits:
         print("\nNo network/crypto markers found. If this was a binary, decompile or extract it "
               "first (see the target's references/ playbook), then re-run on the output directory.")

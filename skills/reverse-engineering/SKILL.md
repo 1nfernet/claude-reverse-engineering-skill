@@ -62,7 +62,8 @@ documenting how a check works in a research write-up, defensive detection).
    ```bash
    python "${CLAUDE_SKILL_DIR}/scripts/check_tools.py"
    ```
-   Add `--task android` (etc.) to focus on one target type.
+   It prints one compact line per task. Once you know the target type, run
+   `--task android` (etc.) to get install commands for what's missing there.
 
 2. **Triage the artifact.** Extensions lie; let the bytes talk. This one pass
    gives file type (magic bytes), header facts (arch, .NET or not), framework/
