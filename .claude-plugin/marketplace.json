@@ -1,0 +1,28 @@
+{
+  "name": "reverse-engineering-skill",
+  "description": "Reverse engineering skill for Claude Code and other AI coding agents.",
+  "owner": {
+    "name": "EncidXVII",
+    "url": "https://github.com/EncidXVII"
+  },
+  "metadata": {
+    "version": "2.0.0"
+  },
+  "plugins": [
+    {
+      "name": "reverse-engineering",
+      "source": ".",
+      "description": "Reverse engineering skill for Claude Code and other AI coding agents.",
+      "category": "security",
+      "tags": [
+        "reverse-engineering",
+        "binary-analysis",
+        "malware-analysis",
+        "ctf",
+        "mobile",
+        "firmware",
+        "security-research"
+      ]
+    }
+  ]
+}

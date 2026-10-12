@@ -1,0 +1,33 @@
+{
+  "name": "reverse-engineering",
+  "version": "2.0.0",
+  "description": "Reverse engineering skill for Claude Code and other AI coding agents.",
+  "author": {
+    "name": "EncidXVII",
+    "url": "https://github.com/EncidXVII"
+  },
+  "homepage": "https://github.com/EncidXVII/claude-reverse-engineering-skill",
+  "repository": "https://github.com/EncidXVII/claude-reverse-engineering-skill",
+  "license": "Apache-2.0",
+  "keywords": [
+    "reverse-engineering",
+    "claude-code",
+    "claude-skills",
+    "agent-skills",
+    "binary-analysis",
+    "decompiler",
+    "ghidra",
+    "ghidra-mcp",
+    "malware-analysis",
+    "android-reverse-engineering",
+    "apk",
+    "ios",
+    "frida",
+    "radare2",
+    "rizin",
+    "firmware-analysis",
+    "ctf",
+    "security-research",
+    "mcp"
+  ]
+}

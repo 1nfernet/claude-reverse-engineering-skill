@@ -1,0 +1,13 @@
+# Analysis workspaces / samples should never be committed
+samples/
+workspace/
+*-workspace/
+_*.extracted/
+*.sample
+# Python
+__pycache__/
+*.pyc
+.venv/
+# OS cruft
+.DS_Store
+Thumbs.db

@@ -1,0 +1,123 @@
+name: validate
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.10", "3.13"]
+        include:
+          # Floor check for the "Python 3.8+" claim. 3.8 isn't installable on
+          # macos-latest (arm64) or ubuntu-24.04, so it runs on ubuntu-22.04 only.
+          - os: ubuntu-22.04
+            python: "3.8"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Run skill test suite (scripts + structure)
+        run: python tests/test_scripts.py
+
+  lint-frontmatter:
+    name: validate SKILL.md frontmatter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Check YAML frontmatter parses and fits the spec
+        run: |
+          python - <<'PY'
+          import re, sys, pathlib
+          try:
+              import yaml
+          except ImportError:
+              import subprocess
+              subprocess.check_call([sys.executable, "-m", "pip", "install", "pyyaml"])
+              import yaml
+          p = pathlib.Path("skills/reverse-engineering/SKILL.md")
+          text = p.read_text(encoding="utf-8")
+          m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+          assert m, "frontmatter must start on line 1"
+          fm = yaml.safe_load(m.group(1))
+          # Only the six portable Agent Skills fields are allowed outside Claude Code.
+          allowed = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
+          extra = set(fm) - allowed
+          assert not extra, f"non-portable frontmatter keys: {extra}"
+          assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", fm["name"]), "name must be lowercase-hyphen"
+          assert 1 <= len(fm["description"]) <= 1024, "description must be 1-1024 chars"
+          if "compatibility" in fm:
+              assert len(fm["compatibility"]) <= 500, "compatibility max 500 chars"
+          print("frontmatter OK:", fm["name"])
+          PY
+
+  # Runs the bundled Ghidra export against a real Ghidra release, so the
+  # headless path stays verified (Ghidra pinned and checksum-checked).
+  ghidra-export:
+    name: Ghidra headless export (real Ghidra 12.1.4)
+    runs-on: ubuntu-latest
+    env:
+      GHIDRA_URL: https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.4_build/ghidra_12.1.4_PUBLIC_20260921.zip
+      GHIDRA_SHA256: ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Download and verify Ghidra
+        run: |
+          curl -sSL -o "$RUNNER_TEMP/ghidra.zip" "$GHIDRA_URL"
+          echo "$GHIDRA_SHA256  $RUNNER_TEMP/ghidra.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/ghidra.zip" -d "$RUNNER_TEMP"
+          G="$RUNNER_TEMP/ghidra_12.1.4_PUBLIC"
+          chmod +x "$G"/support/*.sh "$G/support/analyzeHeadless"
+          find "$G/Ghidra" -path '*/os/linux_x86_64/*' -type f -exec chmod +x {} +
+
+      - name: Export a real binary with DecompileExport.java
+        run: |
+          G="$RUNNER_TEMP/ghidra_12.1.4_PUBLIC"
+          mkdir -p "$RUNNER_TEMP/proj" "$RUNNER_TEMP/sample"
+          cp /usr/bin/true "$RUNNER_TEMP/sample/target"
+          "$G/support/analyzeHeadless" "$RUNNER_TEMP/proj" ci -import "$RUNNER_TEMP/sample/target" \
+            -scriptPath skills/reverse-engineering/scripts/ghidra \
+            -postScript DecompileExport.java "$RUNNER_TEMP/decomp.txt" -deleteProject
+          # analyzeHeadless exits 0 even if the script fails, so check the output itself.
+          test -s "$RUNNER_TEMP/decomp.txt"
+          grep -q "^-- IMPORTS" "$RUNNER_TEMP/decomp.txt"
+          tail -1 "$RUNNER_TEMP/decomp.txt" | grep -E '^/\* exported [1-9][0-9]* functions'
+
+  # Optional: validate the Claude Code plugin manifests if the CLI is present.
+  # Non-blocking — the CLI isn't available on hosted runners by default.
+  plugin-validate:
+    name: claude plugin validate (optional)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - name: claude plugin validate
+        run: |
+          if command -v claude >/dev/null 2>&1; then
+            claude plugin validate .
+          else
+            echo "claude CLI not installed on this runner; skipping (run 'claude plugin validate .' locally)."
+          fi
