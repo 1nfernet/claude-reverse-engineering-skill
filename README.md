@@ -9,6 +9,7 @@ Binary analysis · APK & IPA decompilation · .NET / Java · Electron & WASM · 
 [![Agent Skills](https://img.shields.io/badge/Agent%20Skills-open%20standard-8A2BE2)](https://agentskills.io)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757)](#claude-code-recommended)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-3776AB)](#requirements)
+[![skills.sh](https://img.shields.io/badge/skills.sh-listed-111111)](https://www.skills.sh/encidxvii/claude-reverse-engineering-skill/reverse-engineering)
 
 </div>
 
@@ -112,7 +113,7 @@ Download the repository, zip the `skills/reverse-engineering` folder, and upload
 
 ### Codex, Cursor, Gemini CLI, GitHub Copilot, OpenCode, Windsurf, Kiro
 
-Use the open-source [`skills`](https://github.com/vercel-labs/skills) installer:
+Use the open-source [`skills`](https://github.com/vercel-labs/skills) installer (the skill is listed on [skills.sh](https://www.skills.sh/encidxvii/claude-reverse-engineering-skill/reverse-engineering)):
 
 ```bash
 npx skills add EncidXVII/claude-reverse-engineering-skill --skill reverse-engineering
