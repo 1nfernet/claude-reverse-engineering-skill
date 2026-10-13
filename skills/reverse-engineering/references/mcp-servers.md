@@ -18,6 +18,13 @@ Verify the exact repo, maintainer, and install steps before recommending one —
 these move quickly. The agent doesn't install these itself; point the user at
 the project and let them set it up.
 
+### Multi-tool
+- **rea** (morluto) — one MCP server (plus CLI) over Hopper, Ghidra, or IDA, with
+  built-in readers for Go/Rust binaries, .NET, Flutter, and JS/Electron. Results
+  come with evidence and stated limitations. Setup: `npx rea-agents setup` (Node
+  22+). Pairs well with this skill: rea does the analysis calls, the playbooks here
+  give the method.
+
 ### Ghidra
 - **GhidraMCP** (LaurieWired) — the most widely used. A Ghidra plugin exposing an
   MCP server so an agent can decompile functions, rename, list xrefs, and run
