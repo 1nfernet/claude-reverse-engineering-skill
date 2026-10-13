@@ -67,7 +67,9 @@ def parse_axml(data):
     strings, resmap = [], []
     while pos + 8 <= len(data):
         ctype, hsize, csize = struct.unpack_from("<HHI", data, pos)
-        if csize < 8:
+        # A chunk size is inclusive of its header.  Do not try to decode a
+        # truncated chunk merely because its header is present.
+        if csize < 8 or pos + csize > len(data):
             break
         if ctype == 0x0001:                                # string pool
             count, _styles, flags, sstart = struct.unpack_from("<IIII", data, pos + 8)
