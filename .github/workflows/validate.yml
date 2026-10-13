@@ -104,6 +104,8 @@ jobs:
           # analyzeHeadless exits 0 even if the script fails, so check the output itself.
           test -s "$RUNNER_TEMP/decomp.txt"
           grep -q "^-- IMPORTS" "$RUNNER_TEMP/decomp.txt"
+          grep -q "^-- MOST CALLED FUNCTIONS" "$RUNNER_TEMP/decomp.txt"
+          grep -q "^-- FUNCTIONS CALLING NOTABLE APIs" "$RUNNER_TEMP/decomp.txt"
           tail -1 "$RUNNER_TEMP/decomp.txt" | grep -E '^/\* exported [1-9][0-9]* functions'
 
   # Optional: validate the Claude Code plugin manifests if the CLI is present.

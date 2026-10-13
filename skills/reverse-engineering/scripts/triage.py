@@ -211,6 +211,7 @@ class TriageResult:
     sections: list = field(default_factory=list)
     fingerprints: list = field(default_factory=list)
     dependencies: dict = field(default_factory=dict)
+    crypto: list = field(default_factory=list)
     hashes: dict = field(default_factory=dict)
     entropy: float = 0.0
     entropy_note: str = ""
@@ -303,6 +304,9 @@ def parse_pe(data: bytes, r: TriageResult) -> None:
         clr_rva = clr_size = 0
         if n_rva > 14:
             clr_rva, clr_size = struct.unpack_from("<II", data, dd + 14 * 8)
+        if n_rva > 4:   # certificate table (file offset, size): lets crypto scan skip the code signature
+            r._cert_range = struct.unpack_from("<II", data, dd + 4 * 8)
+        r._image_base = struct.unpack_from("<Q", data, opt + 24)[0] if pe32plus else u32(data, opt + 28)
         sec_off = opt + opt_size
         for i in range(min(nsec, 96)):
             o = sec_off + i * 40
@@ -310,7 +314,7 @@ def parse_pe(data: bytes, r: TriageResult) -> None:
                 break
             name = data[o:o + 8].rstrip(b"\x00").decode("latin-1", "replace")
             vsize, vaddr, rsize, rptr = struct.unpack_from("<IIII", data, o + 8)
-            sec = {"name": name, "virtual_size": vsize, "raw_size": rsize}
+            sec = {"name": name, "virtual_size": vsize, "raw_size": rsize, "vaddr": vaddr, "raw_ptr": rptr}
             if rsize and rptr + rsize <= len(data):
                 sec["entropy"] = shannon_entropy(data[rptr:rptr + rsize])
             r.sections.append(sec)
@@ -506,6 +510,56 @@ class MarkerScanner:
                 if i != -1:
                     self.found[m] = window[max(0, i - 8):i]
         self._tail = window[-_OVERLAP:]
+
+
+# Well-known constant tables (the findcrypt idea). Multi-word patterns only, so
+# chance matches in 64 MB of data stay negligible. 32-bit tables are listed in
+# little-endian (x86/ARM) byte order, with a big-endian variant where common.
+CRYPTO_CONSTANTS = [
+    ("AES S-box", bytes.fromhex("637c777bf26b6fc53001672bfed7ab76")),
+    ("AES inverse S-box", bytes.fromhex("52096ad53036a538bf40a39e81f3d7fb")),
+    ("AES T-table", bytes.fromhex("a56363c6847c7cf8")),
+    ("AES T-table (big-endian)", bytes.fromhex("c66363a5f87c7c84")),
+    ("SHA-256 round constants", bytes.fromhex("982f8a4291443771")),
+    ("SHA-256 round constants (big-endian)", bytes.fromhex("428a2f9871374491")),
+    ("SHA-256 initial hash", bytes.fromhex("67e6096a85ae67bb")),
+    ("SHA-512 round constants", bytes.fromhex("22ae28d7982f8a42")),
+    ("SHA-512 initial hash", bytes.fromhex("08c9bcf367e6096a")),
+    ("MD5 round constants", bytes.fromhex("78a46ad756b7c7e8")),
+    ("MD5 / SHA-1 initial hash", bytes.fromhex("0123456789abcdeffedcba9876543210")),
+    ("CRC-32 table", bytes.fromhex("963007772c610eee")),
+    ("Blowfish P-array (pi digits)", bytes.fromhex("886a3f24d308a385")),
+    ("ChaCha20 / Salsa20 constant", b"expand 32-byte k"),
+    ("DES permutation table", bytes([58, 50, 42, 34, 26, 18, 10, 2, 60, 52])),
+    ("RSA key or certificate (rsaEncryption OID)", bytes.fromhex("06092a864886f70d010101")),
+    ("NIST P-256 curve prime", bytes.fromhex("ffffffff00000001000000000000000000000000ffffffffffffffffffffffff")),
+    ("Base64 alphabet", b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"),
+]
+
+
+def find_crypto(data: bytes, r: TriageResult) -> None:
+    """Locate known crypto/encoding tables; give PE virtual addresses for jumping in Ghidra."""
+    cert = getattr(r, "_cert_range", (0, 0))
+    base = getattr(r, "_image_base", None)
+    for name, pat in CRYPTO_CONSTANTS:
+        hits, start = [], 0
+        while len(hits) < 3:
+            i = data.find(pat, start)
+            if i < 0:
+                break
+            start = i + 1
+            if cert[1] and cert[0] <= i < cert[0] + cert[1]:
+                continue                                  # inside the Authenticode signature, not the program
+            hit = {"offset": "0x%x" % i}
+            if base is not None:
+                for s in r.sections:
+                    if s.get("raw_ptr", 0) <= i < s.get("raw_ptr", 0) + s.get("raw_size", 0):
+                        hit["va"] = "0x%x" % (base + s["vaddr"] + i - s["raw_ptr"])
+                        hit["section"] = s["name"]
+                        break
+            hits.append(hit)
+        if hits:
+            r.crypto.append({"constant": name, "hits": hits})
 
 
 def run_fingerprints(found: dict, r: TriageResult) -> None:
@@ -776,6 +830,8 @@ def triage_file(path: str, r: TriageResult, args) -> None:
                (rust_dependencies(data) if "Rust binary" in names else None)
         if deps:
             r.dependencies = deps
+    if r.route_key not in ("zip", "archive", "compressed", "resource", "asar"):
+        find_crypto(data, r)
 
     if not args.no_strings:
         surface_strings(data, r, args.min_len, args.strings)
@@ -783,6 +839,9 @@ def triage_file(path: str, r: TriageResult, args) -> None:
     r.next_steps = [ROUTES.get(r.route_key, ROUTES["unknown"])]
     for fp in r.fingerprints:
         r.next_steps.append("%s: %s" % (fp["name"], fp["hint"]))
+    if r.crypto:
+        r.next_steps.append("Crypto constants found: jump to each address in Ghidra (or search memory for the "
+                            "bytes) and follow xrefs to the routine that uses it")
     if r.dependencies.get("packages"):
         r.next_steps.append("Check the dependency versions for known vulnerabilities "
                             "(osv-scanner, govulncheck for Go, cargo-audit data for Rust)")
@@ -841,6 +900,14 @@ def print_report(r: TriageResult) -> None:
         print("FINGERPRINTS")
         for fp in r.fingerprints:
             print("  * %s — %s" % (fp["name"], fp["hint"]))
+    if r.crypto:
+        print("-" * 72)
+        print("CRYPTO / ENCODING CONSTANTS")
+        for c in r.crypto:
+            where = ", ".join(
+                (h["va"] + " (" + h.get("section", "") + ")") if "va" in h else "file " + h["offset"]
+                for h in c["hits"])
+            print("  * %-44s %s" % (c["constant"], where))
     if r.dependencies:
         d = r.dependencies
         pk = d.get("packages", [])

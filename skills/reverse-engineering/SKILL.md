@@ -112,9 +112,12 @@ documenting how a check works in a research write-up, defensive detection).
    **`analyzeHeadless` exits 0 even when the script fails** — confirm the output
    file exists and ends with `/* exported N functions */`. Use the `.java` script:
    Ghidra 12+ only runs `.py` scripts when launched through PyGhidra
-   (`decompile_export.py` is the variant for that). Then `grep -n` the export for
-   names/strings and read matching functions with `sed -n 'START,ENDp'` — don't
-   load the whole file into context.
+   (`decompile_export.py` is the variant for that). The export opens with a map:
+   the most-called functions (name those first) and which functions call network,
+   crypto, file, process, registry, and dynamic-loading APIs (start reading
+   there). Read that, then `grep -n` the export for names/strings and read
+   matching functions with `sed -n 'START,ENDp'` — don't load the whole file into
+   context. Crypto constants found by `triage.py` come with addresses to jump to.
 
    Large targets (game executables, Electron/Chromium apps, anything over ~50 MB)
    can take a very long time to analyze. Analyze the one DLL or module that

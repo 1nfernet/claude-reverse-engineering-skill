@@ -32,6 +32,17 @@ the project and let them set it up.
 - **re-mcp** (jtsylve) — a *headless* server covering both Ghidra (via PyGhidra)
   and IDA (via idalib) behind one tool interface; needs Ghidra 12+ / JDK 21+. Good
   when you want no GUI and a shared workflow across both backends.
+- **ReVa** (cyberkaida) — Ghidra extension whose tools are designed around LLM
+  context limits (small tools, extra context like xrefs next to decompilation).
+  Runs inside the Ghidra GUI or headless (`uv tool install
+  reverse-engineering-assistant`, then `mcp-reva`); Ghidra 12+.
+
+### Persistent Ghidra without MCP
+- **ghidra-cli** (akiselev) — a command-line tool that keeps Ghidra loaded between
+  commands, so renames and retypes persist and nothing is re-analyzed: decompile,
+  xrefs, rename, search (including crypto constants), call graphs, JSON output when
+  piped. Built with Rust (`cargo install`), GPL-3.0. Use it instead of the
+  one-shot export in SKILL.md step 6 when you'll iterate on the same binary.
 
 ### IDA Pro
 - **Official Hex-Rays IDA MCP server** — if the user has an IDA license, prefer

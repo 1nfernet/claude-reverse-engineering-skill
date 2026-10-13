@@ -155,6 +155,16 @@ def test_triage():
         rc, data = tri(triage, os.path.join(d, "Demo.app"))
         markers = [m["name"] for m in data.get("directory", {}).get("app_markers", [])]
         check("directory mode works on .app bundle", rc == 0 and "Apple app bundle" in markers, str(markers))
+        # crypto constants: AES S-box inside .text (file 0x210 -> VA 0x1010), SHA-256 K outside any section
+        sbox = bytes.fromhex("637c777bf26b6fc53001672bfed7ab76")
+        pe_bytes = make_pe(extra=bytes.fromhex("982f8a4291443771"))
+        pe_bytes = pe_bytes[:0x210] + sbox + pe_bytes[0x210 + len(sbox):]
+        rc, data = tri(triage, write("crypto.dll", pe_bytes))
+        found = {c["constant"]: c["hits"][0] for c in data.get("crypto", [])}
+        aes = found.get("AES S-box", {})
+        check("crypto: AES S-box with section VA", aes.get("va") == "0x1010" and aes.get("section") == ".text", str(found))
+        check("crypto: SHA-256 constants (file offset)", "SHA-256 round constants" in found, str(found))
+
         # dependency extraction: Go build info (1.18+ inline layout) and Rust crate paths
         def uv(n):
             out = b""

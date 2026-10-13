@@ -27,7 +27,12 @@ import java.io.FileOutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
@@ -47,6 +52,90 @@ import ghidra.program.model.symbol.SymbolTable;
 public class DecompileExport extends GhidraScript {
 
     private static final String BAR = "========================================================================";
+
+    // API families worth knowing about before reading code. Matched against the
+    // (thunk-resolved) names of the functions each function calls.
+    private static final String[][] API_GROUPS = {
+        {"network", "socket|connect|send|recv|sendto|recvfrom|wsa.*|internet.*|winhttp.*|httpsendrequest.*|urldownload.*|curl_.*|getaddrinfo.*|gethostbyname"},
+        {"crypto", "crypt.*|bcrypt.*|ncrypt.*|evp_.*|aes_.*|sha\\d*_.*|md5_.*|rsa_.*|ssl_.*"},
+        {"process", "createprocess.*|shellexecute.*|winexec|system|execv.*|execl.*|fork|posix_spawn.*|popen"},
+        {"files", "createfile.*|readfile|writefile|deletefile.*|movefile.*|copyfile.*|fopen.*|unlink|findfirstfile.*"},
+        {"registry", "reg(open|create|set|query|delete|enum).*"},
+        {"dynamic loading", "loadlibrary.*|getprocaddress|dlopen|dlsym|ldrloaddll"},
+        {"memory / injection", "virtualalloc.*|virtualprotect.*|writeprocessmemory|createremotethread.*|mprotect|mmap"},
+    };
+
+    // Compiler/runtime plumbing that tops every "most called" list but says nothing about the app.
+    private static final Pattern RUNTIME_HELPER = Pattern.compile(
+        "_guard_.*|__security_.*|_?_?chkstk|__?RTC_.*|__GSHandlerCheck.*|__C_specific_handler|"
+            + "_?mem(set|cpy|move|cmp)|_?str(len|cmp|cpy|ncmp)|__stack_chk_fail|_?_?cxa_.*|operator.*",
+        Pattern.CASE_INSENSITIVE);
+
+    /** A map before the code: most-called functions, and who calls notable API families. */
+    private void writeOrientation(PrintWriter out, FunctionManager fm) throws Exception {
+        List<Pattern> patterns = new ArrayList<>();
+        for (String[] g : API_GROUPS) {
+            patterns.add(Pattern.compile(g[1], Pattern.CASE_INSENSITIVE));
+        }
+        List<Object[]> called = new ArrayList<>();               // {count, label}
+        Map<String, List<String>> users = new LinkedHashMap<>();
+        for (String[] g : API_GROUPS) {
+            users.put(g[0], new ArrayList<>());
+        }
+        FunctionIterator it = fm.getFunctions(true);
+        while (it.hasNext() && !monitor.isCancelled()) {
+            Function f = it.next();
+            if (f.isThunk()) {
+                continue;
+            }
+            String label = f.getName() + " @ " + f.getEntryPoint();
+            if (!RUNTIME_HELPER.matcher(f.getName()).matches()) {
+                called.add(new Object[] { f.getCallingFunctions(monitor).size(), label });
+            }
+            List<String> calleeNames = new ArrayList<>();
+            for (Function callee : f.getCalledFunctions(monitor)) {
+                Function target = callee.isThunk() ? callee.getThunkedFunction(true) : callee;
+                calleeNames.add((target != null ? target : callee).getName());
+            }
+            for (int gi = 0; gi < API_GROUPS.length; gi++) {
+                List<String> hits = new ArrayList<>();
+                for (String n : calleeNames) {
+                    if (patterns.get(gi).matcher(n).matches() && !hits.contains(n)) {
+                        hits.add(n);
+                    }
+                }
+                List<String> bucket = users.get(API_GROUPS[gi][0]);
+                if (!hits.isEmpty() && bucket.size() < 12) {
+                    bucket.add(label + "  (" + String.join(", ", hits) + ")");
+                }
+            }
+        }
+        called.sort((a, b) -> Integer.compare((Integer) b[0], (Integer) a[0]));
+        out.println("-- MOST CALLED FUNCTIONS (likely helpers: name these first) --");
+        for (int i = 0; i < Math.min(15, called.size()); i++) {
+            if ((Integer) called.get(i)[0] < 2) {
+                break;
+            }
+            out.println("  " + called.get(i)[0] + " callers  " + called.get(i)[1]);
+        }
+        out.println();
+        out.println("-- FUNCTIONS CALLING NOTABLE APIs (start reading here) --");
+        boolean any = false;
+        for (Map.Entry<String, List<String>> e : users.entrySet()) {
+            if (e.getValue().isEmpty()) {
+                continue;
+            }
+            any = true;
+            out.println("  [" + e.getKey() + "]");
+            for (String s : e.getValue()) {
+                out.println("    " + s);
+            }
+        }
+        if (!any) {
+            out.println("  (none matched; statically linked or obfuscated imports)");
+        }
+        out.println();
+    }
 
     @Override
     protected void run() throws Exception {
@@ -137,6 +226,8 @@ public class DecompileExport extends GhidraScript {
                 sc++;
             }
             out.println();
+
+            writeOrientation(out, fm);
 
             // decompiled functions
             out.println(BAR);

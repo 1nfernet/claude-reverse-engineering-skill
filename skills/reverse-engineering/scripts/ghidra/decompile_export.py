@@ -24,9 +24,69 @@
 # @category Analysis
 
 import codecs
+import re
 
 from ghidra.app.decompiler import DecompInterface
 from ghidra.util.task import ConsoleTaskMonitor
+
+# API families worth knowing before reading code (same list as DecompileExport.java).
+API_GROUPS = [
+    ("network", r"socket|connect|send|recv|sendto|recvfrom|wsa.*|internet.*|winhttp.*|httpsendrequest.*|urldownload.*|curl_.*|getaddrinfo.*|gethostbyname"),
+    ("crypto", r"crypt.*|bcrypt.*|ncrypt.*|evp_.*|aes_.*|sha\d*_.*|md5_.*|rsa_.*|ssl_.*"),
+    ("process", r"createprocess.*|shellexecute.*|winexec|system|execv.*|execl.*|fork|posix_spawn.*|popen"),
+    ("files", r"createfile.*|readfile|writefile|deletefile.*|movefile.*|copyfile.*|fopen.*|unlink|findfirstfile.*"),
+    ("registry", r"reg(open|create|set|query|delete|enum).*"),
+    ("dynamic loading", r"loadlibrary.*|getprocaddress|dlopen|dlsym|ldrloaddll"),
+    ("memory / injection", r"virtualalloc.*|virtualprotect.*|writeprocessmemory|createremotethread.*|mprotect|mmap"),
+]
+
+
+# Compiler/runtime plumbing that tops every "most called" list but says nothing about the app.
+RUNTIME_HELPER = re.compile(r"(?:_guard_.*|__security_.*|_?_?chkstk|__?RTC_.*|__GSHandlerCheck.*|"
+                            r"__C_specific_handler|_?mem(set|cpy|move|cmp)|_?str(len|cmp|cpy|ncmp)|"
+                            r"__stack_chk_fail|_?_?cxa_.*|operator.*)$", re.I)
+
+
+def write_orientation(fh, fm, monitor):
+    """A map before the code: most-called functions, and who calls notable API families."""
+    pats = [(name, re.compile("(?:%s)$" % rx, re.I)) for name, rx in API_GROUPS]
+    called, users = [], dict((name, []) for name, _ in API_GROUPS)
+    it = fm.getFunctions(True)
+    while it.hasNext():
+        f = it.next()
+        if f.isThunk():
+            continue
+        label = "%s @ %s" % (f.getName(), f.getEntryPoint().toString())
+        if not RUNTIME_HELPER.match(f.getName()):
+            called.append((f.getCallingFunctions(monitor).size(), label))
+        names = []
+        for callee in f.getCalledFunctions(monitor):
+            target = callee.getThunkedFunction(True) if callee.isThunk() else callee
+            names.append((target if target is not None else callee).getName())
+        for gname, pat in pats:
+            hits = []
+            for n in names:
+                if pat.match(n) and n not in hits:
+                    hits.append(n)
+            if hits and len(users[gname]) < 12:
+                users[gname].append("%s  (%s)" % (label, ", ".join(hits)))
+    called.sort(key=lambda c: -c[0])
+    fh.write("-- MOST CALLED FUNCTIONS (likely helpers: name these first) --\n")
+    for count, label in called[:15]:
+        if count < 2:
+            break
+        fh.write("  %d callers  %s\n" % (count, label))
+    fh.write("\n-- FUNCTIONS CALLING NOTABLE APIs (start reading here) --\n")
+    any_hit = False
+    for gname, _ in API_GROUPS:
+        if users[gname]:
+            any_hit = True
+            fh.write("  [%s]\n" % gname)
+            for s in users[gname]:
+                fh.write("    %s\n" % s)
+    if not any_hit:
+        fh.write("  (none matched; statically linked or obfuscated imports)\n")
+    fh.write("\n")
 
 
 def _getarg(args, i, default):
@@ -112,6 +172,7 @@ def main():
         decomp = DecompInterface()
         decomp.openProgram(program)
         monitor = ConsoleTaskMonitor()
+        write_orientation(fh, fm, monitor)
 
         fh.write("=" * 72 + "\n")
         fh.write("DECOMPILED FUNCTIONS\n")

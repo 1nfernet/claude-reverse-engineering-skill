@@ -46,7 +46,7 @@ Built for authorized work: security research, CTFs, malware analysis, interopera
 - **Finds the network surface fast.** Pulls Retrofit annotations, HTTP client calls, URLs, hosts, auth headers, and crypto usage out of decompiled code and minified JS, each with `file:line`.
 - **Safe with untrusted samples.** Isolation rules for malware, `python -I` against import hijacking, and an explicit rule that text inside a binary is data — never instructions — so analyzed files can't prompt-inject the agent.
 - **Grounded output.** Every finding must cite an address, offset, symbol, or request the tools actually showed, say how it's known (decompiler, assembly, runtime, or inferred), and name what wasn't verified.
-- **Tested on real tools, not just docs.** 61 automated checks covering every script and the skill's structure, run in CI on Linux, macOS, and Windows, plus a CI job that runs the Ghidra export against a real Ghidra release on every push.
+- **Tested on real tools, not just docs.** 63 automated checks covering every script and the skill's structure, run in CI on Linux, macOS, and Windows, plus a CI job that runs the Ghidra export against a real Ghidra release on every push.
 - **Light on context.** One short `SKILL.md`; the 14 playbooks load only when a task needs them, so the skill costs almost nothing until it's used.
 - **One permissive license.** Everything is Apache-2.0 — safe to use at work, fork, and ship.
 
@@ -165,7 +165,7 @@ All scripts are standard-library Python — nothing to `pip install`.
 
 | Script | What it does |
 | --- | --- |
-| [`triage.py`](skills/reverse-engineering/scripts/triage.py) | Identify a file **or a whole folder** (install dir, extracted archive, macOS `.app`): format, architecture, real .NET check, framework/packer/installer fingerprints, Go and Rust dependency lists with versions, hashes, per-section entropy, interesting strings, container contents, and next steps. |
+| [`triage.py`](skills/reverse-engineering/scripts/triage.py) | Identify a file **or a whole folder** (install dir, extracted archive, macOS `.app`): format, architecture, real .NET check, framework/packer/installer fingerprints, Go and Rust dependency lists with versions, crypto constants (AES, SHA, ChaCha, RSA…) with addresses, hashes, per-section entropy, interesting strings, container contents, and next steps. |
 | [`app_inspect.py`](skills/reverse-engineering/scripts/app_inspect.py) | Platform facts in one call: Android manifest (permissions, exported components, deep links, debug/backup flags), iOS/macOS Info.plist, entitlements and App Store encryption per architecture, Windows version info and signer, game engine/version/backend and where the code lives (Unity, Unreal, Godot). |
 | [`check_tools.py`](skills/reverse-engineering/scripts/check_tools.py) | Which RE tools, JDK version, and Python RE libraries are installed, grouped by task, with install hints for what's missing. |
 | [`extract_endpoints.py`](skills/reverse-engineering/scripts/extract_endpoints.py) | Network and crypto surface of a decompiled tree: Retrofit/smali annotations, client calls, URLs, hosts, auth headers, crypto APIs. Handles minified one-line bundles; masks secrets by default. |
