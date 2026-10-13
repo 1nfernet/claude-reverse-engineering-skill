@@ -155,6 +155,33 @@ def test_triage():
         rc, data = tri(triage, os.path.join(d, "Demo.app"))
         markers = [m["name"] for m in data.get("directory", {}).get("app_markers", [])]
         check("directory mode works on .app bundle", rc == 0 and "Apple app bundle" in markers, str(markers))
+        # dependency extraction: Go build info (1.18+ inline layout) and Rust crate paths
+        def uv(n):
+            out = b""
+            while n >= 0x80:
+                out += bytes([(n & 0x7F) | 0x80])
+                n >>= 7
+            return out + bytes([n])
+        modinfo = (b"\x30\x77\xaf\x0c\x92\x74\x08\x02\x41\xe1\xc1\x07\xe6\xd6\x18\xe6"
+                   b"path\texample.com/tool\nmod\texample.com/tool\tv1.4.0\th1:abc=\n"
+                   b"dep\tgolang.org/x/sys\tv0.18.0\th1:def=\n"
+                   b"\xf9\x32\x43\x31\x86\x18\x20\x72\x00\x82\x42\x10\x41\x16\xd8\xf2")
+        ver = b"go1.22.3"
+        binf = b"\xff Go buildinf:" + bytes([8, 2]) + b"\x00" * 16 + uv(len(ver)) + ver + uv(len(modinfo)) + modinfo
+        gobin = write("gotool", b"\x7fELF\x02\x01\x01" + b"\x00" * 9 + struct.pack("<HH", 2, 62) + b"\x00" * 200 + binf)
+        rc, data = tri(triage, gobin)
+        dep = data.get("dependencies", {})
+        check("Go: toolchain + main module + deps", dep.get("toolchain") == "go1.22.3"
+              and dep.get("main_module") == "example.com/tool v1.4.0"
+              and "golang.org/x/sys v0.18.0" in dep.get("packages", []), str(dep))
+        rust = write("rusttool.exe", make_pe(extra=(
+            b"/rustc/abc123/library/core/src/panicking.rs\x00"
+            b"C:\\Users\\dev\\.cargo\\registry\\src\\index.crates.io-6f17d22bba15001f\\serde-1.0.197\\src\\de.rs\x00"
+            b"/cargo/registry/src/index.crates.io-6f17d22bba15001f/regex-automata-0.4.6/src/meta.rs\x00")))
+        rc, data = tri(triage, rust)
+        pk = data.get("dependencies", {}).get("packages", [])
+        check("Rust: crates from source paths", "serde 1.0.197" in pk and "regex-automata 0.4.6" in pk, str(pk))
+
         # malformed input must not crash
         for name, blob in (("trunc_pe", b"MZ\x00\x00"), ("trunc_elf", b"\x7fELF"), ("empty", b"")):
             rc, _ = tri(triage, write(name, blob))

@@ -2,7 +2,8 @@
 
 > Fill this in as you work, not at the end. Every claim should carry a coordinate
 > (address, offset, symbol, class/method, or captured request #) so anyone can
-> re-derive it.
+> re-derive it, and say how it's known: *decompiler*, *assembly*, *runtime*, or
+> *inferred* — plus what wasn't verified.
 
 ## 1. Target identification
 - **Artifact / filename:** 
@@ -23,14 +24,14 @@
 - **Key commands run:** (enough to reproduce)
 
 ## 4. Static findings
-| Coordinate (addr/offset/symbol) | What it is | Evidence |
-| --- | --- | --- |
-|  |  |  |
+| Coordinate (addr/offset/symbol) | What it is | Evidence | Known via | Not verified |
+| --- | --- | --- | --- | --- |
+|  |  |  | decompiler / assembly / inferred |  |
 
 ## 5. Dynamic findings
-| Hook / breakpoint / capture | Observation | Reproduction |
-| --- | --- | --- |
-|  |  |  |
+| Hook / breakpoint / capture | Observation | Reproduction | Not verified |
+| --- | --- | --- | --- |
+|  |  |  |  |
 
 ## 6. Data structures / formats recovered
 ```

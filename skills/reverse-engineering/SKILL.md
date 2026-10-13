@@ -116,6 +116,12 @@ documenting how a check works in a research write-up, defensive detection).
    names/strings and read matching functions with `sed -n 'START,ENDp'` — don't
    load the whole file into context.
 
+   Large targets (game executables, Electron/Chromium apps, anything over ~50 MB)
+   can take a very long time to analyze. Analyze the one DLL or module that
+   matters instead of the whole app, cap analysis with `-analysisTimeoutPerFile
+   900` (seconds) and `-max-cpu <n>`, pass the export's name filter and function
+   cap, and run it in the background so you aren't blocked waiting.
+
    For a decompiled/extracted tree (jadx output, a JS bundle, a firmware rootfs),
    map the endpoints, hosts, and crypto surface fast:
    ```bash
@@ -195,3 +201,8 @@ Full isolation, network containment, and anti-analysis handling:
 - **Cite only what a tool showed you.** Every address, offset, function name, or
   endpoint in your answer must come from tool output in this session. If you
   haven't seen it, say it's unconfirmed — don't fill gaps with plausible guesses.
+- **State how each conclusion is known, and what isn't verified.** Tag it:
+  *read in decompiler*, *confirmed in assembly*, *observed at runtime*, or
+  *inferred*. Name the gap ("this branch never executed", "decompiler output not
+  checked against assembly", "only one of three callers read"). A short honest
+  limitation beats a confident wrong answer.

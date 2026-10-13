@@ -210,6 +210,7 @@ class TriageResult:
     format_details: dict = field(default_factory=dict)
     sections: list = field(default_factory=list)
     fingerprints: list = field(default_factory=list)
+    dependencies: dict = field(default_factory=dict)
     hashes: dict = field(default_factory=dict)
     entropy: float = 0.0
     entropy_note: str = ""
@@ -394,6 +395,90 @@ def parse_cafebabe(data: bytes, r: TriageResult) -> None:
         java = {45: "1.1", 46: "1.2", 47: "1.3", 48: "1.4", 49: "5", 50: "6", 51: "7", 52: "8"}
         r.file_label, r.route_key = "Java class file", "java-class"
         r.format_details["class_version"] = "%d (Java %s)" % (major, java.get(major, str(major - 44)))
+
+
+GO_BUILDINF = b"\xff Go buildinf:"
+GO_MODLINE = re.compile(rb"(?<![A-Za-z0-9_])(path|mod|dep)\t([^\t\n]+)(?:\t([^\t\n]*))?")
+RUST_CRATE = re.compile(rb"[/\\](?:registry[/\\]src[/\\][^/\\]+|vendor)[/\\]([A-Za-z0-9_\-]+?)-(\d+\.\d+\.\d+(?:-[0-9A-Za-z.\-]+)?)[/\\]")
+
+
+def _uvarint(buf: bytes, i: int):
+    x = shift = 0
+    while i < len(buf):
+        b = buf[i]
+        i += 1
+        x |= (b & 0x7F) << shift
+        if b < 0x80:
+            return x, i
+        shift += 7
+    raise ValueError("truncated varint")
+
+
+def _find_in_file(path: str, marker: bytes, chunk: int = 4 * 1024 * 1024) -> int:
+    """Offset of the first occurrence of marker anywhere in the file, or -1."""
+    with open(path, "rb") as f:
+        pos, tail = 0, b""
+        while True:
+            block = f.read(chunk)
+            if not block:
+                return -1
+            window = tail + block
+            i = window.find(marker)
+            if i != -1:
+                return pos - len(tail) + i
+            tail = window[-(len(marker) - 1):]
+            pos += len(block)
+
+
+def go_dependencies(path: str, data: bytes):
+    """Go version, main module, and dependency list from the embedded build info."""
+    i = data.find(GO_BUILDINF)
+    if i != -1:
+        block = data[i:i + 65536]
+    else:
+        off = _find_in_file(path, GO_BUILDINF)
+        if off < 0:
+            return None
+        with open(path, "rb") as f:
+            f.seek(off)
+            block = f.read(65536)
+    info = {"language": "Go"}
+    if len(block) > 33 and block[15] & 0x2:          # Go 1.18+: strings stored inline after the header
+        try:
+            n, j = _uvarint(block, 32)
+            info["toolchain"] = block[j:j + n].decode("utf-8", "replace")
+        except ValueError:
+            pass
+    if "toolchain" not in info:
+        m = re.search(rb"go1\.\d+(?:\.\d+)?", block) or re.search(rb"go1\.\d+(?:\.\d+)?", data)
+        if m:
+            info["toolchain"] = m.group(0).decode()
+    lines = GO_MODLINE.findall(block) or GO_MODLINE.findall(data)   # older layouts keep modinfo elsewhere
+    deps = []
+    for kind, mod_path, ver in lines:
+        entry = (mod_path + (b" " + ver if ver else b"")).decode("utf-8", "replace")
+        if kind == b"path":
+            info.setdefault("main_package", entry)
+        elif kind == b"mod":
+            info.setdefault("main_module", entry)
+        elif entry not in deps:
+            deps.append(entry)
+    info["packages"] = deps
+    return info
+
+
+def rust_dependencies(data: bytes):
+    """Crate names and versions leaked through panic/source paths."""
+    crates = {}
+    for m in RUST_CRATE.finditer(data):
+        crates[m.group(1).decode()] = m.group(2).decode()
+    if not crates:
+        return None
+    info = {"language": "Rust", "packages": sorted("%s %s" % kv for kv in crates.items())}
+    m = re.search(rb"rustc version (\d+\.\d+\.\d+)", data)
+    if m:
+        info["toolchain"] = "rustc " + m.group(1).decode()
+    return info
 
 
 ALL_MARKERS = sorted({m for _n, _r, _h, alts in FINGERPRINTS for alt in alts for m in alt} | {DOTNET_BUNDLE_SIG})
@@ -686,6 +771,11 @@ def triage_file(path: str, r: TriageResult, args) -> None:
 
     if r.route_key in ("native-pe", "native-elf", "macho", "macho-fat", "dotnet", "unknown"):
         run_fingerprints(scanner.found, r)
+        names = {fp["name"] for fp in r.fingerprints}
+        deps = (go_dependencies(path, data) if "Go binary" in names else None) or \
+               (rust_dependencies(data) if "Rust binary" in names else None)
+        if deps:
+            r.dependencies = deps
 
     if not args.no_strings:
         surface_strings(data, r, args.min_len, args.strings)
@@ -693,6 +783,9 @@ def triage_file(path: str, r: TriageResult, args) -> None:
     r.next_steps = [ROUTES.get(r.route_key, ROUTES["unknown"])]
     for fp in r.fingerprints:
         r.next_steps.append("%s: %s" % (fp["name"], fp["hint"]))
+    if r.dependencies.get("packages"):
+        r.next_steps.append("Check the dependency versions for known vulnerabilities "
+                            "(osv-scanner, govulncheck for Go, cargo-audit data for Rust)")
 
 
 def main(argv=None) -> int:
@@ -748,6 +841,18 @@ def print_report(r: TriageResult) -> None:
         print("FINGERPRINTS")
         for fp in r.fingerprints:
             print("  * %s — %s" % (fp["name"], fp["hint"]))
+    if r.dependencies:
+        d = r.dependencies
+        pk = d.get("packages", [])
+        print("-" * 72)
+        print("DEPENDENCIES  (%s, %d packages)" % (d["language"], len(pk)))
+        for k in ("toolchain", "main_module", "main_package"):
+            if d.get(k):
+                print("  {:<13} {}".format(k + ":", d[k]))
+        for p in pk[:20]:
+            print("    " + p)
+        if len(pk) > 20:
+            print("    ... %d more (use --json)" % (len(pk) - 20))
     if r.container:
         c = r.container
         print("-" * 72)
