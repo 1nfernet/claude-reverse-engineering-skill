@@ -169,7 +169,7 @@ All scripts are standard-library Python — nothing to `pip install`.
 | [`app_inspect.py`](skills/reverse-engineering/scripts/app_inspect.py) | Platform facts in one call: Android manifest (permissions, exported components, deep links, debug/backup flags), iOS/macOS Info.plist, entitlements and App Store encryption per architecture, Windows version info and signer, game engine/version/backend and where the code lives (Unity, Unreal, Godot). |
 | [`check_tools.py`](skills/reverse-engineering/scripts/check_tools.py) | Which RE tools, JDK version, and Python RE libraries are installed, grouped by task, with install hints for what's missing. |
 | [`extract_endpoints.py`](skills/reverse-engineering/scripts/extract_endpoints.py) | Network and crypto surface of a decompiled tree: Retrofit/smali annotations, client calls, URLs, hosts, auth headers, crypto APIs. Handles minified one-line bundles; masks secrets by default. |
-| [`DecompileExport.java`](skills/reverse-engineering/scripts/ghidra/DecompileExport.java) | Ghidra headless post-script: decompiled C for every function plus entry points, imports (with DLL names), and strings, in one UTF-8 file. `decompile_export.py` is the PyGhidra variant. |
+| [`DecompileExport.java`](skills/reverse-engineering/scripts/ghidra/DecompileExport.java) | Ghidra headless post-script: one UTF-8 file that opens with a map (most-called functions, and which functions call network, crypto, file, process, registry and loading APIs), then entry points, imports (with DLL names), strings, and decompiled C for every function. `decompile_export.py` is the PyGhidra variant. |
 
 Real `triage.py` output for a Rust executable (trimmed):
 
